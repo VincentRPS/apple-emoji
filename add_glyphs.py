@@ -25,121 +25,121 @@ from fontTools.ttLib import newTable
 import add_emoji_gsub
 import add_aliases
 
-sys.path.append(
-    path.join(os.path.dirname(__file__), 'third_party', 'color_emoji'))
+sys.path.append(path.join(os.path.dirname(__file__), "third_party", "color_emoji"))
 from png import PNG
 
 
 def get_seq_to_file(image_dir, prefix, suffix):
-  """Return a mapping from codepoint sequences to files in the given directory,
-  for files that match the prefix and suffix.  File names with this prefix and
-  suffix should consist of codepoints in hex separated by underscore.  'fe0f'
-  (the codepoint of the emoji presentation variation selector) is stripped from
-  the sequence.
-  """
-  start = len(prefix)
-  limit = -len(suffix)
-  seq_to_file = {}
-  for name in os.listdir(image_dir):
-    if not (name.startswith(prefix) and name.endswith(suffix)):
-      continue
-    try:
-      cps = [int(s, 16) for s in name[start:limit].split('_')]
-      seq = tuple(cp for cp in cps if cp != 0xfe0f)
-    except:
-      raise Exception('could not parse "%s"' % name)
-    for cp in cps:
-      if not (0 <= cp <= 0x10ffff):
-        raise Exception('bad codepoint(s) in "%s"' % name)
-    if seq in seq_to_file:
-      raise Exception('duplicate sequence for "%s" in %s' % (name, image_dir))
-    seq_to_file[seq] = path.join(image_dir, name)
-  return seq_to_file
+    """Return a mapping from codepoint sequences to files in the given directory,
+    for files that match the prefix and suffix.  File names with this prefix and
+    suffix should consist of codepoints in hex separated by underscore.  'fe0f'
+    (the codepoint of the emoji presentation variation selector) is stripped from
+    the sequence.
+    """
+    start = len(prefix)
+    limit = -len(suffix)
+    seq_to_file = {}
+    for name in os.listdir(image_dir):
+        if not (name.startswith(prefix) and name.endswith(suffix)):
+            continue
+        try:
+            cps = [int(s, 16) for s in name[start:limit].split("_")]
+            seq = tuple(cp for cp in cps if cp != 0xFE0F)
+        except:
+            raise Exception('could not parse "%s"' % name)
+        for cp in cps:
+            if not (0 <= cp <= 0x10FFFF):
+                raise Exception('bad codepoint(s) in "%s"' % name)
+        if seq in seq_to_file:
+            raise Exception('duplicate sequence for "%s" in %s' % (name, image_dir))
+        seq_to_file[seq] = path.join(image_dir, name)
+    return seq_to_file
 
 
 def collect_seq_to_file(image_dirs, prefix, suffix):
-  """Return a sequence to file mapping by calling get_seq_to_file on a list
-  of directories.  When sequences for files in later directories match those
-  from earlier directories, the later file replaces the earlier one.
-  """
-  seq_to_file = {}
-  for image_dir in image_dirs:
-    seq_to_file.update(get_seq_to_file(image_dir, prefix, suffix))
-  return seq_to_file
+    """Return a sequence to file mapping by calling get_seq_to_file on a list
+    of directories.  When sequences for files in later directories match those
+    from earlier directories, the later file replaces the earlier one.
+    """
+    seq_to_file = {}
+    for image_dir in image_dirs:
+        seq_to_file.update(get_seq_to_file(image_dir, prefix, suffix))
+    return seq_to_file
 
 
 def remap_values(seq_to_file, map_fn):
-  return {k: map_fn(v) for k, v in seq_to_file.items()}
+    return {k: map_fn(v) for k, v in seq_to_file.items()}
 
 
 def get_png_file_to_advance_mapper(lineheight):
-  def map_fn(filename):
-    wid, ht = PNG(filename).get_size()
-    return int(round(float(lineheight) * wid / ht))
-  return map_fn
+    def map_fn(filename):
+        wid, ht = PNG(filename).get_size()
+        return int(round(float(lineheight) * wid / ht))
+
+    return map_fn
 
 
 def cp_name(cp):
-  """return uniXXXX or uXXXXX(X) as a name for the glyph mapped to this cp."""
-  return '%s%04X' % ('u' if cp > 0xffff else 'uni', cp)
+    """return uniXXXX or uXXXXX(X) as a name for the glyph mapped to this cp."""
+    return "%s%04X" % ("u" if cp > 0xFFFF else "uni", cp)
 
 
 def seq_name(seq):
-  """Sequences of length one get the cp_name.  Others start with 'u' followed by
-  two or more 4-to-6-digit hex strings separated by underscore."""
-  if len(seq) == 1:
-    return cp_name(seq[0])
-  return 'u' + '_'.join('%04X' % cp for cp in seq)
+    """Sequences of length one get the cp_name.  Others start with 'u' followed by
+    two or more 4-to-6-digit hex strings separated by underscore."""
+    if len(seq) == 1:
+        return cp_name(seq[0])
+    return "u" + "_".join("%04X" % cp for cp in seq)
 
 
 def collect_cps(seqs):
-  cps = set()
-  for seq in seqs:
-    cps.update(seq)
-  return cps
+    cps = set()
+    for seq in seqs:
+        cps.update(seq)
+    return cps
 
 
 def get_glyphorder_cps_and_truncate(glyphOrder):
-  """This scans glyphOrder for names that correspond to a single codepoint
-  using the 'u(ni)XXXXXX' syntax.  All names that don't match are moved
-  to the front the glyphOrder list in their original order, and the
-  list is truncated.  The ones that do match are returned as a set of
-  codepoints."""
-  glyph_name_re = re.compile(r'^u(?:ni)?([0-9a-fA-F]{4,6})$')
-  cps = set()
-  write_ix = 0
-  for ix, name in enumerate(glyphOrder):
-    m = glyph_name_re.match(name)
-    if m:
-      cps.add(int(m.group(1), 16))
-    else:
-      glyphOrder[write_ix] = name
-      write_ix += 1
-  del glyphOrder[write_ix:]
-  return cps
+    """This scans glyphOrder for names that correspond to a single codepoint
+    using the 'u(ni)XXXXXX' syntax.  All names that don't match are moved
+    to the front the glyphOrder list in their original order, and the
+    list is truncated.  The ones that do match are returned as a set of
+    codepoints."""
+    glyph_name_re = re.compile(r"^u(?:ni)?([0-9a-fA-F]{4,6})$")
+    cps = set()
+    write_ix = 0
+    for ix, name in enumerate(glyphOrder):
+        m = glyph_name_re.match(name)
+        if m:
+            cps.add(int(m.group(1), 16))
+        else:
+            glyphOrder[write_ix] = name
+            write_ix += 1
+    del glyphOrder[write_ix:]
+    return cps
 
 
 def get_all_seqs(font, seq_to_advance):
-  """Copies the sequences from seq_to_advance and extends it with single-
-  codepoint sequences from the GlyphOrder table as well as those internal
-  to sequences in seq_to_advance.  Reduces the GlyphOrder table. """
+    """Copies the sequences from seq_to_advance and extends it with single-
+    codepoint sequences from the GlyphOrder table as well as those internal
+    to sequences in seq_to_advance.  Reduces the GlyphOrder table."""
 
-  all_seqs = set(seq_to_advance.keys())
-  # using collect_cps includes cps internal to a seq
-  cps = collect_cps(all_seqs)
-  glyphOrder = font.getGlyphOrder()
-  # extract cps in glyphOrder and reduce glyphOrder to only those that remain
-  glyphOrder_cps = get_glyphorder_cps_and_truncate(glyphOrder)
-  cps.update(glyphOrder_cps)
-  # add new single codepoint sequences from glyphOrder and sequences
-  all_seqs.update((cp,) for cp in cps)
-  return all_seqs
+    all_seqs = set(seq_to_advance.keys())
+    # using collect_cps includes cps internal to a seq
+    cps = collect_cps(all_seqs)
+    glyphOrder = font.getGlyphOrder()
+    # extract cps in glyphOrder and reduce glyphOrder to only those that remain
+    glyphOrder_cps = get_glyphorder_cps_and_truncate(glyphOrder)
+    cps.update(glyphOrder_cps)
+    # add new single codepoint sequences from glyphOrder and sequences
+    all_seqs.update((cp,) for cp in cps)
+    return all_seqs
 
 
 def get_font_cmap(font):
-  """Return the first cmap in the font, we assume it exists and is a unicode
-  cmap."""
-  return font['cmap'].tables[0].cmap
+    """Return the first cmap in the font, we assume it exists and is a unicode
+    cmap."""
+    return font["cmap"].tables[0].cmap
 
 
 def add_glyph_data(font, seqs, seq_to_advance, vadvance, add_glyf):
@@ -207,140 +207,142 @@ def add_glyph_data(font, seqs, seq_to_advance, vadvance, add_glyf):
 
 
 def add_aliases_to_cmap(font, aliases):
-  """Some aliases might map a single codepoint to some other sequence.  These
-  should map directly to the glyph for that sequence in the cmap.  (Others will
-  map via GSUB).
-  """
-  if not aliases:
-    return
+    """Some aliases might map a single codepoint to some other sequence.  These
+    should map directly to the glyph for that sequence in the cmap.  (Others will
+    map via GSUB).
+    """
+    if not aliases:
+        return
 
-  cp_aliases = [seq for seq in aliases if len(seq) == 1]
-  if not cp_aliases:
-    return
+    cp_aliases = [seq for seq in aliases if len(seq) == 1]
+    if not cp_aliases:
+        return
 
-  cmap = get_font_cmap(font)
-  for src_seq in cp_aliases:
-    cp = src_seq[0]
-    name = seq_name(aliases[src_seq])
-    cmap[cp] = name
+    cmap = get_font_cmap(font)
+    for src_seq in cp_aliases:
+        cp = src_seq[0]
+        name = seq_name(aliases[src_seq])
+        cmap[cp] = name
 
 
 def get_rtl_seq(seq):
-  """Return the rtl variant of the sequence, if it has one, else the empty
-  sequence.
-  """
-  # Sequences with ZWJ in them will reflect.  Fitzpatrick modifiers
-  # however do not, so if we reflect we make a pass to swap them back into their
-  # logical order.
-  # Used to check for TAG_END 0xe007f as well but Android fontchain_lint
-  # dislikes the resulting mangling of flags for England, Scotland, Wales.
+    """Return the rtl variant of the sequence, if it has one, else the empty
+    sequence.
+    """
+    # Sequences with ZWJ in them will reflect.  Fitzpatrick modifiers
+    # however do not, so if we reflect we make a pass to swap them back into their
+    # logical order.
+    # Used to check for TAG_END 0xe007f as well but Android fontchain_lint
+    # dislikes the resulting mangling of flags for England, Scotland, Wales.
 
-  ZWJ = 0x200d
-  def is_fitzpatrick(cp):
-    return 0x1f3fb <= cp <= 0x1f3ff
+    ZWJ = 0x200D
 
-  if ZWJ not in seq:
-    return ()
+    def is_fitzpatrick(cp):
+        return 0x1F3FB <= cp <= 0x1F3FF
 
-  rev_seq = list(seq)
-  rev_seq.reverse()
-  for i in range(1, len(rev_seq)):
-    if is_fitzpatrick(rev_seq[i-1]):
-      tmp = rev_seq[i]
-      rev_seq[i] = rev_seq[i-1]
-      rev_seq[i-1] = tmp
-  return tuple(rev_seq)
+    if ZWJ not in seq:
+        return ()
+
+    rev_seq = list(seq)
+    rev_seq.reverse()
+    for i in range(1, len(rev_seq)):
+        if is_fitzpatrick(rev_seq[i - 1]):
+            tmp = rev_seq[i]
+            rev_seq[i] = rev_seq[i - 1]
+            rev_seq[i - 1] = tmp
+    return tuple(rev_seq)
 
 
 def get_gsub_ligature_lookup(font):
-  """If the font does not have a GSUB table, create one with a ligature
-  substitution lookup.  If it does, ensure the first lookup is a properly
-  initialized ligature substitution lookup.  Return the lookup."""
+    """If the font does not have a GSUB table, create one with a ligature
+    substitution lookup.  If it does, ensure the first lookup is a properly
+    initialized ligature substitution lookup.  Return the lookup."""
 
-  # The template might include more lookups after lookup 0, if it has a
-  # GSUB table.
-  if 'GSUB' not in font:
-    ligature_subst = otTables.LigatureSubst()
-    ligature_subst.ligatures = {}
+    # The template might include more lookups after lookup 0, if it has a
+    # GSUB table.
+    if "GSUB" not in font:
+        ligature_subst = otTables.LigatureSubst()
+        ligature_subst.ligatures = {}
 
-    lookup = otTables.Lookup()
-    lookup.LookupType = 4
-    lookup.LookupFlag = 0
-    lookup.SubTableCount = 1
-    lookup.SubTable = [ligature_subst]
+        lookup = otTables.Lookup()
+        lookup.LookupType = 4
+        lookup.LookupFlag = 0
+        lookup.SubTableCount = 1
+        lookup.SubTable = [ligature_subst]
 
-    font['GSUB'] = add_emoji_gsub.create_simple_gsub([lookup])
-  else:
-    lookup = font['GSUB'].table.LookupList.Lookup[0]
-    assert lookup.LookupFlag == 0
+        font["GSUB"] = add_emoji_gsub.create_simple_gsub([lookup])
+    else:
+        lookup = font["GSUB"].table.LookupList.Lookup[0]
+        assert lookup.LookupFlag == 0
 
-    # importXML doesn't fully init GSUB structures, so help it out
-    st = lookup.SubTable[0]
-    if not hasattr(lookup, 'LookupType'):
-      assert st.LookupType == 4
-      setattr(lookup, 'LookupType', 4)
+        # importXML doesn't fully init GSUB structures, so help it out
+        st = lookup.SubTable[0]
+        if not hasattr(lookup, "LookupType"):
+            assert st.LookupType == 4
+            setattr(lookup, "LookupType", 4)
 
-    if not hasattr(st, 'ligatures'):
-      setattr(st, 'ligatures', {})
+        if not hasattr(st, "ligatures"):
+            setattr(st, "ligatures", {})
 
-  return lookup
+    return lookup
 
 
 def add_ligature_sequences(font, seqs, aliases):
-  """Add ligature sequences."""
+    """Add ligature sequences."""
 
-  seq_to_target_name = {
-      seq: seq_name(seq) for seq in seqs if len(seq) > 1}
-  if aliases:
-    seq_to_target_name.update({
-        seq: seq_name(aliases[seq]) for seq in aliases if len(seq) > 1})
-  if not seq_to_target_name:
-    return
+    seq_to_target_name = {seq: seq_name(seq) for seq in seqs if len(seq) > 1}
+    if aliases:
+        seq_to_target_name.update(
+            {seq: seq_name(aliases[seq]) for seq in aliases if len(seq) > 1}
+        )
+    if not seq_to_target_name:
+        return
 
-  rtl_seq_to_target_name = {
-      get_rtl_seq(seq): name for seq, name in seq_to_target_name.items()}
-  seq_to_target_name.update(rtl_seq_to_target_name)
-  # sequences that don't have rtl variants get mapped to the empty sequence,
-  # delete it.
-  if () in seq_to_target_name:
-    del seq_to_target_name[()]
+    rtl_seq_to_target_name = {
+        get_rtl_seq(seq): name for seq, name in seq_to_target_name.items()
+    }
+    seq_to_target_name.update(rtl_seq_to_target_name)
+    # sequences that don't have rtl variants get mapped to the empty sequence,
+    # delete it.
+    if () in seq_to_target_name:
+        del seq_to_target_name[()]
 
-  # organize by first codepoint in sequence
-  keyed_ligatures = collections.defaultdict(list)
-  for t in seq_to_target_name.items():
-    first_cp = t[0][0]
-    keyed_ligatures[first_cp].append(t)
+    # organize by first codepoint in sequence
+    keyed_ligatures = collections.defaultdict(list)
+    for t in seq_to_target_name.items():
+        first_cp = t[0][0]
+        keyed_ligatures[first_cp].append(t)
 
-  def add_ligature(lookup, cmap, seq, name):
-    # The sequences consist of codepoints, but the entries in the ligature table
-    # are glyph names.  Aliasing can give single codepoints names based on
-    # sequences (e.g. 'guardsman' with 'male guardsman') so we map the
-    # codepoints through the cmap to get the glyph names.
-    glyph_names = [cmap[cp] for cp in seq]
+    def add_ligature(lookup, cmap, seq, name):
+        # The sequences consist of codepoints, but the entries in the ligature table
+        # are glyph names.  Aliasing can give single codepoints names based on
+        # sequences (e.g. 'guardsman' with 'male guardsman') so we map the
+        # codepoints through the cmap to get the glyph names.
+        glyph_names = [cmap[cp] for cp in seq]
 
-    lig = otTables.Ligature()
-    lig.CompCount = len(seq)
-    lig.Component = glyph_names[1:]
-    lig.LigGlyph = name
+        lig = otTables.Ligature()
+        lig.CompCount = len(seq)
+        lig.Component = glyph_names[1:]
+        lig.LigGlyph = name
 
-    ligatures = lookup.SubTable[0].ligatures
-    first_name = glyph_names[0]
-    try:
-      ligatures[first_name].append(lig)
-    except KeyError:
-      ligatures[first_name] = [lig]
+        ligatures = lookup.SubTable[0].ligatures
+        first_name = glyph_names[0]
+        try:
+            ligatures[first_name].append(lig)
+        except KeyError:
+            ligatures[first_name] = [lig]
 
-  lookup = get_gsub_ligature_lookup(font)
-  cmap = get_font_cmap(font)
-  for first_cp in sorted(keyed_ligatures):
-    pairs = keyed_ligatures[first_cp]
+    lookup = get_gsub_ligature_lookup(font)
+    cmap = get_font_cmap(font)
+    for first_cp in sorted(keyed_ligatures):
+        pairs = keyed_ligatures[first_cp]
 
-    # Sort longest first, this ensures longer sequences with common prefixes
-    # are handled before shorter ones.  The secondary sort is a standard
-    # sort on the codepoints in the sequence.
-    pairs.sort(key = lambda pair: (-len(pair[0]), pair[0]))
-    for seq, name in pairs:
-      add_ligature(lookup, cmap, seq, name)
+        # Sort longest first, this ensures longer sequences with common prefixes
+        # are handled before shorter ones.  The secondary sort is a standard
+        # sort on the codepoints in the sequence.
+        pairs.sort(key=lambda pair: (-len(pair[0]), pair[0]))
+        for seq, name in pairs:
+            add_ligature(lookup, cmap, seq, name)
 
 def add_cmap_format_4(font):
   """Add cmap format 4 table for Windows support, based on the
@@ -368,46 +370,47 @@ def update_font_data(font, seq_to_advance, vadvance, aliases, add_cmap4, add_gly
     add_cmap_format_4(font)
 
 def apply_aliases(seq_dict, aliases):
-  """Aliases is a mapping from sequence to replacement sequence.  We can use
-  an alias if the target is a key in the dictionary.  Furthermore, if the
-  source is a key in the dictionary, we can delete it.  This updates the
-  dictionary and returns the usable aliases."""
-  usable_aliases = {}
-  for k, v in aliases.items():
-    if v in seq_dict:
-      usable_aliases[k] = v
-      if k in seq_dict:
-        del seq_dict[k]
-  return usable_aliases
+    """Aliases is a mapping from sequence to replacement sequence.  We can use
+    an alias if the target is a key in the dictionary.  Furthermore, if the
+    source is a key in the dictionary, we can delete it.  This updates the
+    dictionary and returns the usable aliases."""
+    usable_aliases = {}
+    for k, v in aliases.items():
+        if v in seq_dict:
+            usable_aliases[k] = v
+            if k in seq_dict:
+                del seq_dict[k]
+    return usable_aliases
 
 
 def update_ttx(in_file, out_file, image_dirs, prefix, ext, aliases_file, add_cmap4, add_glyf):
   if ext != '.png':
     raise Exception('extension "%s" not supported' % ext)
 
-  seq_to_file = collect_seq_to_file(image_dirs, prefix, ext)
-  if not seq_to_file:
-    raise ValueError(
-        'no sequences with prefix "%s" and extension "%s" in %s' % (
-            prefix, ext, ', '.join(image_dirs)))
+    seq_to_file = collect_seq_to_file(image_dirs, prefix, ext)
+    if not seq_to_file:
+        raise ValueError(
+            'no sequences with prefix "%s" and extension "%s" in %s'
+            % (prefix, ext, ", ".join(image_dirs))
+        )
 
-  aliases = None
-  if aliases_file:
-    aliases = add_aliases.read_emoji_aliases(aliases_file)
-    aliases = apply_aliases(seq_to_file, aliases)
+    aliases = None
+    if aliases_file:
+        aliases = add_aliases.read_emoji_aliases(aliases_file)
+        aliases = apply_aliases(seq_to_file, aliases)
 
-  font = ttx.TTFont()
-  font.importXML(in_file)
+    font = ttx.TTFont()
+    font.importXML(in_file)
 
-  lineheight = font['hhea'].ascent - font['hhea'].descent
-  map_fn = get_png_file_to_advance_mapper(lineheight)
-  seq_to_advance = remap_values(seq_to_file, map_fn)
+    lineheight = font["hhea"].ascent - font["hhea"].descent
+    map_fn = get_png_file_to_advance_mapper(lineheight)
+    seq_to_advance = remap_values(seq_to_file, map_fn)
 
-  vadvance = font['vhea'].advanceHeightMax if 'vhea' in font else lineheight
+    vadvance = font["vhea"].advanceHeightMax if "vhea" in font else lineheight
 
   update_font_data(font, seq_to_advance, vadvance, aliases, add_cmap4, add_glyf)
 
-  font.saveXML(out_file)
+    font.saveXML(out_file)
 
 
 def main():
